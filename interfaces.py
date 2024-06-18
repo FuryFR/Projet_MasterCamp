@@ -1,15 +1,20 @@
 import tkinter as tk
 from tkinter import messagebox
+import socket
+import threading
 
 # Initialiser l'application Tkinter
 app = tk.Tk()
 
-# Variables globales pour les champs d'entrée
+# Variables globales pour les champs d'entrée et la connexion
 username_entry = None
 password_entry = None
 email_entry = None
 gender_var = None
 student_id_entry = None
+chat_text = None
+input_text = None
+client_socket = None
 
 # Fonction pour afficher la fenêtre de connexion
 def show_login():
@@ -122,6 +127,7 @@ def show_signup():
 
 # Fonction pour afficher la fenêtre de chatroom
 def show_chatroom():
+    global chat_text, input_text
     for widget in app.winfo_children():
         widget.destroy()
     app.title("Chatroom")
@@ -156,13 +162,23 @@ def show_chatroom():
     send_button = tk.Button(input_frame, text="Send", command=lambda: send_message(chat_text, input_text))
     send_button.pack(side=tk.RIGHT, padx=5, pady=5)
 
+    # Démarrer le thread pour recevoir les messages
+    threading.Thread(target=receive_messages, daemon=True).start()
+
 # Fonction de connexion
 def connect():
+    global client_socket
     username = username_entry.get()
     password = password_entry.get()
     # Logique de connexion ici
-    messagebox.showinfo("Information", f"Username: {username}\nPassword: {password}")
-    show_chatroom()
+    try:
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_ip = "192.168.1.164"  # Remplacez par l'adresse IP de votre serveur
+        client_socket.connect((server_ip, 9999))
+        messagebox.showinfo("Information", f"Username: {username}\nPassword: {password}")
+        show_chatroom()
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
 
 # Fonction de soumission du formulaire
 def submit():
@@ -177,11 +193,28 @@ def submit():
 # Fonction pour envoyer un message
 def send_message(chat_text, input_text):
     message = input_text.get()
-    if message:
-        chat_text.config(state=tk.NORMAL)
-        chat_text.insert(tk.END, f"You: {message}\n")
-        chat_text.config(state=tk.DISABLED)
-        input_text.delete(0, tk.END)
+    if message and client_socket:
+        try:
+            client_socket.send(message.encode('utf-8'))
+            chat_text.config(state=tk.NORMAL)
+            chat_text.insert(tk.END, f"You: {message}\n")
+            chat_text.config(state=tk.DISABLED)
+            input_text.delete(0, tk.END)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+# Fonction pour recevoir des messages du serveur
+def receive_messages():
+    while True:
+        try:
+            message = client_socket.recv(1024).decode('utf-8')
+            if not message:
+                break
+            chat_text.config(state=tk.NORMAL)
+            chat_text.insert(tk.END, f"{message}\n")
+            chat_text.config(state=tk.DISABLED)
+        except Exception as e:
+            break
 
 # Afficher la fenêtre de connexion par défaut
 show_login()
