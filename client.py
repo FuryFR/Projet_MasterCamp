@@ -170,13 +170,17 @@ def connect():
     global client_socket
     username = username_entry.get()
     password = password_entry.get()
-    # Logique de connexion ici
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_ip = "192.168.1.164"  # Remplacez par l'adresse IP de votre serveur
+        server_ip = "192.168.1.5"  # Remplacez par l'adresse IP de votre serveur
         client_socket.connect((server_ip, 9999))
-        messagebox.showinfo("Information", f"Username: {username}\nPassword: {password}")
-        show_chatroom()
+        client_socket.send(f"LOGIN {username} {password}".encode('utf-8'))
+        response = client_socket.recv(1024).decode('utf-8')
+        if response == "Login successful":
+            messagebox.showinfo("Information", response)
+            show_chatroom()
+        else:
+            messagebox.showerror("Error", response)
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
@@ -185,10 +189,19 @@ def submit():
     username = username_entry.get()
     email = email_entry.get()
     password = password_entry.get()
-    gender = gender_var.get()
-    student_id = student_id_entry.get()
-    # Logique de soumission du formulaire ici
-    messagebox.showinfo("Information", f"Username: {username}\nEmail: {email}\nPassword: {password}\nGender: {gender}\nStudent ID: {student_id}")
+    try:
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_ip = "192.168.1.5"  # Remplacez par l'adresse IP de votre serveur
+        client_socket.connect((server_ip, 9999))
+        client_socket.send(f"REGISTER {username} {password} {email}".encode('utf-8'))
+        response = client_socket.recv(1024).decode('utf-8')
+        messagebox.showinfo("Information", response)
+        if "successful" in response.lower():
+            show_login()  # Redirection vers la page de login après une inscription réussie
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+    finally:
+        client_socket.close()
 
 # Fonction pour envoyer un message
 def send_message(chat_text, input_text):
@@ -210,11 +223,14 @@ def receive_messages():
             message = client_socket.recv(1024).decode('utf-8')
             if not message:
                 break
+            if message.startswith("You:"):
+                continue
             chat_text.config(state=tk.NORMAL)
             chat_text.insert(tk.END, f"{message}\n")
             chat_text.config(state=tk.DISABLED)
         except Exception as e:
             break
+
 
 # Afficher la fenêtre de connexion par défaut
 show_login()
