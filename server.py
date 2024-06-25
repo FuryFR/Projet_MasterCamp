@@ -1,8 +1,10 @@
+# server.py
+
 import socket
 import threading
 import sqlite3
 
-clients = []
+clients = {}
 clients_lock = threading.Lock()
 
 # Initialiser la base de données
@@ -47,9 +49,7 @@ def handle_initial_connection(client_socket, addr):
             _, username, password = message.split()
             if authenticate_user(username, password):
                 client_socket.send("Login successful".encode('utf-8'))
-                with clients_lock:
-                    clients.append((client_socket, addr, username))  # Ajouter le nom d'utilisateur à la liste des clients
-                threading.Thread(target=handle_client, args=(client_socket, addr, username)).start()
+                threading.Thread(target=handle_room_selection, args=(client_socket, addr, username)).start()
             else:
                 client_socket.send("Login failed".encode('utf-8'))
                 client_socket.close()
@@ -64,36 +64,59 @@ def handle_initial_connection(client_socket, addr):
         print(f"Erreur: {str(e)}")
         client_socket.close()
 
+def handle_room_selection(client_socket, addr, username):
+    try:
+        client_socket.send("Select room: 1, 2, 3, 4, 5".encode('utf-8'))
+        message = client_socket.recv(1024).decode('utf-8')
+        if message.startswith("ROOM"):
+            _, room = message.split()
+            with clients_lock:
+                if room not in clients:
+                    clients[room] = []
+                clients[room].append((client_socket, addr, username))
+            client_socket.send(f"Joined room {room}".encode('utf-8'))
+            threading.Thread(target=handle_client, args=(client_socket, addr, username, room)).start()
+        else:
+            client_socket.send("Invalid room selection".encode('utf-8'))
+            client_socket.close()
+    except Exception as e:
+        print(f"Erreur: {str(e)}")
+        client_socket.close()
 
-def handle_client(client_socket, addr, username):
-    print(f"[*] Nouvelle connexion de {addr} (utilisateur: {username})")
+def handle_client(client_socket, addr, username, room):
+    print(f"[*] Nouvelle connexion de {addr} (utilisateur: {username}) dans la salle {room}")
     while True:
         try:
             message = client_socket.recv(1024).decode('utf-8')
             if not message:
                 break
             if message == "LOGOUT":
-                print(f"[*] Déconnexion de {username}")
-                break
-            print(f"Message de {username} | {addr} : {message}")
-            broadcast_message(f"{username}: {message}", client_socket)
+                with clients_lock:
+                    clients[room].remove((client_socket, addr, username))
+                client_socket.close()
+                print(f"[*] Déconnexion de {addr} (utilisateur: {username}) dans la salle {room}")
+                return
+            log_message(addr, username, room, message)
+            broadcast_message(f"{username}: {message}", client_socket, room)
         except ConnectionResetError:
             break
     with clients_lock:
-        clients.remove((client_socket, addr, username))
+        clients[room].remove((client_socket, addr, username))
     client_socket.close()
-    print(f"[*] Connexion fermée de {addr} (utilisateur: {username})")
+    print(f"[*] Connexion fermée de {addr} (utilisateur: {username}) dans la salle {room}")
 
-
-def broadcast_message(message, sender_socket):
+def broadcast_message(message, sender_socket, room):
     with clients_lock:
-        for client_socket, addr, username in clients:
+        for client_socket, addr, username in clients[room]:
             if client_socket != sender_socket:
                 try:
                     client_socket.send(message.encode('utf-8'))
                 except:
                     client_socket.close()
-                    clients.remove((client_socket, addr, username))
+                    clients[room].remove((client_socket, addr, username))
+
+def log_message(addr, username, room, message):
+    print(f"[{addr}] ({username}) [Room {room}] : {message}")
 
 def main():
     init_db()

@@ -1,3 +1,5 @@
+# client.py
+
 import tkinter as tk
 from tkinter import messagebox
 import socket
@@ -15,7 +17,6 @@ student_id_entry = None
 chat_text = None
 input_text = None
 client_socket = None
-server_ip = "192.168.1.5"
 
 # Fonction pour afficher la fenêtre de connexion
 def show_login():
@@ -128,12 +129,38 @@ def show_signup():
 
     login_label.bind("<Button-1>", lambda e: show_login())
 
+# Fonction pour afficher la fenêtre de choix de salle
+def show_room_selection():
+    for widget in app.winfo_children():
+        widget.destroy()
+    app.title("Room Selection")
+    app.geometry("500x300")
+    app.configure(bg='#1c1c1c')
+
+    # Utiliser grid pour un layout responsive
+    app.grid_rowconfigure(0, weight=1)
+    app.grid_rowconfigure(1, weight=1)
+    app.grid_rowconfigure(2, weight=1)
+    app.grid_rowconfigure(3, weight=1)
+    app.grid_rowconfigure(4, weight=1)
+    app.grid_rowconfigure(5, weight=1)
+    app.grid_columnconfigure(0, weight=1)
+
+    # Ajouter le titre
+    title_label = tk.Label(app, text="Select a Room", font=("Arial", 18), fg="#ffffff", bg="#1c1c1c")
+    title_label.grid(row=0, columnspan=2, pady=10)
+
+    # Ajouter les boutons pour chaque salle
+    for i in range(1, 6):
+        room_button = tk.Button(app, text=f"Room {i}", command=lambda i=i: join_room(i), bg="#ffffff", fg="#000000")
+        room_button.grid(row=i, column=0, pady=10)
+
 # Fonction pour afficher la fenêtre de chatroom
-def show_chatroom():
+def show_chatroom(room):
     global chat_text, input_text
     for widget in app.winfo_children():
         widget.destroy()
-    app.title("Chatroom")
+    app.title(f"Chatroom - Room {room}")
     app.geometry("500x400")
 
     app.configure(bg='#1c1c1c')
@@ -175,11 +202,8 @@ def logout():
             client_socket.send("LOGOUT".encode('utf-8'))
         except Exception as e:
             messagebox.showerror("Error", str(e))
-        finally:
-            client_socket.close()
-            client_socket = None
+        client_socket.close()
     show_login()
-
 
 # Fonction de connexion
 def connect():
@@ -189,19 +213,20 @@ def connect():
 
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_ip = "192.168.1.5"  # Remplacez par l'adresse IP de votre serveur
         client_socket.connect((server_ip, 9999))
         client_socket.send(f"LOGIN {username} {password}".encode('utf-8'))
         response = client_socket.recv(1024).decode('utf-8')
         if response == "Login successful":
             messagebox.showinfo("Information", response)
-            show_chatroom()
+            show_room_selection()
         else:
             messagebox.showerror("Error", response)
 
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
-# Fonction de soumission du formulaire
+# Fonction pour soumettre le formulaire
 def submit():
     username = username_entry.get()
     email = email_entry.get()
@@ -209,6 +234,7 @@ def submit():
 
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_ip = "192.168.1.5"  # Remplacez par l'adresse IP de votre serveur
         client_socket.connect((server_ip, 9999))
         client_socket.send(f"REGISTER {username} {password} {email}".encode('utf-8'))
         response = client_socket.recv(1024).decode('utf-8')
@@ -219,7 +245,6 @@ def submit():
         messagebox.showerror("Error", str(e))
     finally:
         client_socket.close()
-
 
 # Fonction pour envoyer un message
 def send_message(chat_text, input_text):
@@ -233,6 +258,19 @@ def send_message(chat_text, input_text):
             input_text.delete(0, tk.END)
         except Exception as e:
             messagebox.showerror("Error", str(e))
+
+# Fonction pour rejoindre une salle
+def join_room(room):
+    global client_socket
+    try:
+        client_socket.send(f"ROOM {room}".encode('utf-8'))
+        response = client_socket.recv(1024).decode('utf-8')
+        if response == f"Joined room {room}":
+            show_chatroom(room)
+        else:
+            messagebox.showerror("Error", response)
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
 
 # Fonction pour recevoir des messages du serveur
 def receive_messages():
@@ -249,7 +287,6 @@ def receive_messages():
             chat_text.config(state=tk.DISABLED)
         except Exception as e:
             break
-
 
 # Afficher la fenêtre de connexion par défaut
 show_login()
