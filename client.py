@@ -1,5 +1,3 @@
-# client.py
-
 import tkinter as tk
 from tkinter import messagebox
 import socket
@@ -216,15 +214,24 @@ def connect():
         server_ip = "192.168.1.5"  # Remplacez par l'adresse IP de votre serveur
         client_socket.connect((server_ip, 9999))
         client_socket.send(f"LOGIN {username} {password}".encode('utf-8'))
-        response = client_socket.recv(1024).decode('utf-8')
-        if response == "Login successful":
-            messagebox.showinfo("Information", response)
-            show_room_selection()
-        else:
-            messagebox.showerror("Error", response)
-
+        
+        # Boucle pour attendre la réponse correcte du serveur
+        while True:
+            response = client_socket.recv(1024).decode('utf-8')
+            print(f"Server response: {response}")
+            if response == "Login successful":
+                messagebox.showinfo("Information", response)
+                show_room_selection()
+                break
+            elif response == "Login failed":
+                messagebox.showerror("Error", response)
+                client_socket.close()
+                break
+            else:
+                print(f"Unexpected response: {response}")
     except Exception as e:
         messagebox.showerror("Error", str(e))
+
 
 # Fonction pour soumettre le formulaire
 def submit():
@@ -263,14 +270,26 @@ def send_message(chat_text, input_text):
 def join_room(room):
     global client_socket
     try:
+        # Envoie de la requête de room
         client_socket.send(f"ROOM {room}".encode('utf-8'))
-        response = client_socket.recv(1024).decode('utf-8')
-        if response == f"Joined room {room}":
-            show_chatroom(room)
-        else:
-            messagebox.showerror("Error", response)
+        
+        # Boucle pour attendre la réponse correcte du serveur
+        while True:
+            response = client_socket.recv(1024).decode('utf-8')
+            print(f"Server response: {response}")
+            if response == f"Joined room {room}":
+                show_chatroom(room)
+                break
+            elif "Invalid room selection" in response or "Error" in response:
+                messagebox.showerror("Error", response)
+                break
+            elif response.startswith("Select room"):
+                continue  # Ignorer les messages de sélection de room supplémentaires
+            else:
+                print(f"Unexpected response: {response}")
     except Exception as e:
         messagebox.showerror("Error", str(e))
+
 
 # Fonction pour recevoir des messages du serveur
 def receive_messages():

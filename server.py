@@ -1,5 +1,3 @@
-# server.py
-
 import socket
 import threading
 import sqlite3
@@ -45,11 +43,13 @@ def authenticate_user(username, password):
 def handle_initial_connection(client_socket, addr):
     try:
         message = client_socket.recv(1024).decode('utf-8')
+        print(f"Received initial message from {addr}: {message}")
         if message.startswith("LOGIN"):
             _, username, password = message.split()
             if authenticate_user(username, password):
                 client_socket.send("Login successful".encode('utf-8'))
-                threading.Thread(target=handle_room_selection, args=(client_socket, addr, username)).start()
+                print(f"User {username} logged in successfully")
+                handle_room_selection(client_socket, addr, username)  # Direct call instead of thread
             else:
                 client_socket.send("Login failed".encode('utf-8'))
                 client_socket.close()
@@ -57,6 +57,7 @@ def handle_initial_connection(client_socket, addr):
             _, username, password, email = message.split()
             response = register_user(username, password, email)
             client_socket.send(response.encode('utf-8'))
+            client_socket.close()
         else:
             client_socket.send("Invalid command".encode('utf-8'))
             client_socket.close()
@@ -68,6 +69,7 @@ def handle_room_selection(client_socket, addr, username):
     try:
         client_socket.send("Select room: 1, 2, 3, 4, 5".encode('utf-8'))
         message = client_socket.recv(1024).decode('utf-8')
+        print(f"Received room selection from {addr}: {message}")
         if message.startswith("ROOM"):
             _, room = message.split()
             with clients_lock:
@@ -75,13 +77,15 @@ def handle_room_selection(client_socket, addr, username):
                     clients[room] = []
                 clients[room].append((client_socket, addr, username))
             client_socket.send(f"Joined room {room}".encode('utf-8'))
-            threading.Thread(target=handle_client, args=(client_socket, addr, username, room)).start()
+            print(f"User {username} joined room {room}")
+            handle_client(client_socket, addr, username, room)  # Direct call instead of thread
         else:
             client_socket.send("Invalid room selection".encode('utf-8'))
             client_socket.close()
     except Exception as e:
         print(f"Erreur: {str(e)}")
         client_socket.close()
+
 
 def handle_client(client_socket, addr, username, room):
     print(f"[*] Nouvelle connexion de {addr} (utilisateur: {username}) dans la salle {room}")
