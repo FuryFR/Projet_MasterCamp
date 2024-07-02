@@ -7,6 +7,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes
+
 import datetime
 import bcrypt
 import smtplib
@@ -146,6 +147,7 @@ def load_public_key(username):
         public_key = serialization.load_pem_public_key(key_file.read())
     return public_key
 
+
 def send_session_key(client_socket, room):
     try:
         key = room_keys[room]
@@ -187,8 +189,6 @@ def handle_initial_connection(client_socket, addr):
         client_socket.close()
 
 
-
-
 def handle_room_selection(client_socket, addr, username):
     try:
         client_socket.send("Select room: 1, 2, 3, 4, 5".encode('utf-8'))
@@ -223,7 +223,6 @@ def handle_client(client_socket, addr, username, room):
             if not header:
                 break
             message_length = int.from_bytes(header, byteorder='big')
-
             encrypted_message = b""
             while len(encrypted_message) < message_length:
                 part = client_socket.recv(message_length - len(encrypted_message))
@@ -236,7 +235,6 @@ def handle_client(client_socket, addr, username, room):
 
             print(f"Longueur du message chiffré reçu par le serveur : {len(encrypted_message)}")
             print(f"Message chiffré reçu par le serveur : {encrypted_message.hex()}")
-
             timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             sender_info = f"{username} ({timestamp})".encode('utf-8')
             sender_info_length = len(sender_info)

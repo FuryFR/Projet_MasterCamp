@@ -1,15 +1,16 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import socket
 import threading
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import os
 
-# Initialiser l'application Tkinter
+
+# Initialize Tkinter application
 app = tk.Tk()
 
-# Variables globales pour les champs d'entrée et la connexion
+# Global variables for input fields and connection
 username_entry = None
 password_entry = None
 email_entry = None
@@ -21,6 +22,7 @@ current_room = None
 server_ip = "192.168.1.5"
 otp_entry = None
 
+
 def show_login():
     global username_entry, password_entry, otp_entry
     for widget in app.winfo_children():
@@ -28,7 +30,7 @@ def show_login():
     app.title("Login Form")
     app.geometry("500x300")
     app.configure(bg='#1c1c1c')
-
+    
     app.grid_rowconfigure(0, weight=1)
     app.grid_rowconfigure(1, weight=1)
     app.grid_rowconfigure(2, weight=1)
@@ -41,6 +43,7 @@ def show_login():
     title_label = tk.Label(app, text="LOGIN", font=("Arial", 18), fg="#ffffff", bg="#1c1c1c")
     title_label.grid(row=0, columnspan=2, pady=10)
 
+    # Subtitle
     subtitle_label = tk.Label(app, text="Discuss your favorite technology with the community!", font=("Arial", 10), fg="#c5c5c5", bg="#1c1c1c")
     subtitle_label.grid(row=1, columnspan=2)
 
@@ -56,6 +59,7 @@ def show_login():
 
     connect_button = tk.Button(app, text="Connect", command=connect, bg="#ffffff", fg="#000000")
     connect_button.grid(row=5, columnspan=2, pady=10)
+
 
     signup_label = tk.Label(app, text="Signup", font=("Arial", 10), fg="#76c7c0", bg="#1c1c1c", cursor="hand2")
     signup_label.grid(row=6, columnspan=2)
@@ -171,40 +175,37 @@ def show_chatroom(room):
     for widget in app.winfo_children():
         widget.destroy()
     app.title(f"Chatroom - Room {room}")
-    app.geometry("500x400")
-
+    app.geometry("800x600")
     app.configure(bg='#1c1c1c')
 
-    # Utiliser grid pour un layout responsive
     app.grid_rowconfigure(0, weight=1)
-    app.grid_rowconfigure(1, weight=0)
-    app.grid_rowconfigure(2, weight=0)
+    app.grid_rowconfigure(1, weight=20)
+    app.grid_rowconfigure(2, weight=1)
     app.grid_columnconfigure(0, weight=1)
+    app.grid_columnconfigure(1, weight=4)
 
-    # Frame pour les messages
-    chat_frame = tk.Frame(app, bg='#1c1c1c')
-    chat_frame.grid(row=0, column=0, sticky="nsew")
+    chat_text = tk.Text(app, state=tk.DISABLED, wrap=tk.WORD, bg="#2b2b2b", fg="#ffffff")
+    chat_text.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
 
-    chat_text = tk.Text(chat_frame, bg='#2b2b2b', fg='#ffffff', state=tk.DISABLED)
-    chat_text.pack(expand=True, fill=tk.BOTH, padx=5, pady=5)
+    input_text = tk.Entry(app, bg="#2b2b2b", fg="#ffffff")
+    input_text.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
 
-    input_frame = tk.Frame(app, bg='#1c1c1c')
-    input_frame.grid(row=1, column=0, sticky="nsew")
+    button_frame = tk.Frame(app, bg='#1c1c1c')
+    button_frame.grid(row=2, column=0, columnspan=2, pady=10)
 
-    input_text = tk.Entry(input_frame, bg='#2b2b2b', fg='#ffffff')
-    input_text.pack(side=tk.LEFT, expand=True, fill=tk.BOTH, padx=5, pady=5)
-    input_text.bind("<Return>", lambda event: send_message(chat_text, input_text))
+    send_button = tk.Button(button_frame, text="Send", command=send_message, bg="#ffffff", fg="#000000")
+    send_button.pack(side=tk.LEFT, padx=10, pady=10)
 
-    send_button = tk.Button(input_frame, text="Send", command=lambda: send_message(chat_text, input_text), bg="#ffffff", fg="#000000")
-    send_button.pack(side=tk.RIGHT, padx=5, pady=5)
+    document_button = tk.Button(button_frame, text="Send Document", command=send_document, bg="#ffffff", fg="#000000")
+    document_button.pack(side=tk.LEFT, padx=10, pady=10)
 
-    logout_button = tk.Button(app, text="Logout", command=logout, bg="#ffffff", fg="#000000")
-    logout_button.grid(row=2, column=0, pady=10)
+    logout_button = tk.Button(button_frame, text="Logout", command=logout, bg="#ffffff", fg="#000000")
+    logout_button.pack(side=tk.LEFT, padx=10, pady=10)
 
-    # Démarrer le thread pour recevoir les messages
-    threading.Thread(target=receive_messages, daemon=True).start()
+    app.bind("<Return>", lambda event: send_message())
 
-# Fonction de déconnexion
+    input_text.focus()
+    
 def logout():
     global client_socket
     if client_socket:
@@ -214,6 +215,7 @@ def logout():
             messagebox.showerror("Error", str(e))
         client_socket.close()
     show_login()
+
 
 # Fonction pour recevoir la clé de session
 def receive_session_key(client_socket):
@@ -312,9 +314,32 @@ def send_message(chat_text, input_text):
             chat_text.insert(tk.END, f"You: {message}\n")
             chat_text.config(state=tk.DISABLED)
             input_text.delete(0, tk.END)
+            update_chat(f"You: {message}\n")  # Update local chat with sent message
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+def send_document():
+    file_path = filedialog.askopenfilename()
+    if file_path:
+        try:
+            # Read document data from file
+            with open(file_path, "rb") as file:
+                document_data = file.read()
+                filename = os.path.basename(file_path).encode('utf-8')
+                
+                # Prepend filename to document data
+                encrypted_message = encrypt_message(b"DOCUMENT " + filename + b'\n' + document_data)
+                
+                # Send encrypted message
+                send_data(encrypted_message)
+                
+                # Update local chat with document info
+                update_chat(f"You sent a document: {os.path.basename(file_path)}\n")
+        
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+            
 # Fonction pour rejoindre une salle
 def join_room(room):
     global client_socket, session_key
@@ -340,6 +365,11 @@ def join_room(room):
 
 # Fonction pour recevoir des messages du serveur
 def receive_messages():
+    global chat_text
+    download_folder = "downloads"
+    if not os.path.exists(download_folder):
+        os.makedirs(download_folder)
+    
     while True:
         try:
             sender_info_header = client_socket.recv(4)
@@ -347,7 +377,6 @@ def receive_messages():
                 break
             sender_info_length = int.from_bytes(sender_info_header, byteorder='big')
             sender_info = client_socket.recv(sender_info_length).decode('utf-8')
-
             header = client_socket.recv(4)
             if not header:
                 break
@@ -363,15 +392,45 @@ def receive_messages():
 
             if not encrypted_message:
                 break
+            decrypted_message = decrypt_message(encrypted_message)
+            if decrypted_message.startswith(b"DOCUMENT "):
+                # Handle document reception
+                document_data = decrypted_message[len(b"DOCUMENT "):]
+                
+                # Extract original filename
+                original_filename = document_data.decode('utf-8').split('\n')[0]
+                
+                # Prompt user to confirm download
+                confirm_download = messagebox.askyesno("Document Download", f"Do you want to download: {original_filename}?")
+                
+                if confirm_download:
+                    document_path = os.path.join(download_folder, original_filename)
+                    with open(document_path, "wb") as doc_file:
+                        doc_file.write(document_data)
+                    update_chat(f"Received a document: {original_filename}\n")
+                else:
+                    update_chat(f"Download of {original_filename} canceled by user.\n")
+            else:
+                # Handle regular message reception
+                message_text = decrypted_message.decode('utf-8')
+                update_chat(message_text + "\n")
 
-            print(f"Message chiffré reçu : {encrypted_message.hex()} (taille : {len(encrypted_message)} octets)")  # Débogage
-            message = decrypt_message(encrypted_message).decode('utf-8')
+        except Exception as e:
+            print(f"Error receiving message: {str(e)}")
+            break
+        
+        print(f"Message chiffré reçu : {encrypted_message.hex()} (taille : {len(encrypted_message)} octets)")  # Débogage
             chat_text.config(state=tk.NORMAL)
-            chat_text.insert(tk.END, f"{sender_info}: {message}\n")
+            chat_text.insert(tk.END, f"{sender_info}: {decrypted_message}\n")
             chat_text.config(state=tk.DISABLED)
         except Exception as e:
             print(f"Erreur : {str(e)}")
             break
+
+    client_socket.close()
+    show_login()
+
+            
 
 def decrypt_message(encrypted_message):
     global session_key
@@ -383,7 +442,67 @@ def decrypt_message(encrypted_message):
     print(f"Message déchiffré : {decrypted_message.decode('utf-8')}")  # Débogage
     return decrypted_message
 
-# Afficher la fenêtre de connexion par défaut
-show_login()
+    username_label = tk.Label(app, text="Username *", font=("Arial", 12), fg="#ffffff", bg="#1c1c1c")
+    username_label.grid(row=1, column=0, sticky="e", pady=5)
+    username_entry = tk.Entry(app, bg="#2b2b2b", fg="#ffffff")
+    username_entry.grid(row=1, column=1, sticky="w")
 
+    password_label = tk.Label(app, text="Password *", font=("Arial", 12), fg="#ffffff", bg="#1c1c1c")
+    password_label.grid(row=2, column=0, sticky="e", pady=5)
+    password_entry = tk.Entry(app, show="*", bg="#2b2b2b", fg="#ffffff")
+    password_entry.grid(row=2, column=1, sticky="w")
+
+    email_label = tk.Label(app, text="Email *", font=("Arial", 12), fg="#ffffff", bg="#1c1c1c")
+    email_label.grid(row=3, column=0, sticky="e", pady=5)
+    email_entry = tk.Entry(app, bg="#2b2b2b", fg="#ffffff")
+    email_entry.grid(row=3, column=1, sticky="w")
+
+    register_button = tk.Button(app, text="Register", command=register, bg="#ffffff", fg="#000000")
+    register_button.grid(row=4, columnspan=2, pady=10)
+
+    login_label = tk.Label(app, text="Already have an account? Login here", font=("Arial", 10), fg="#ffffff", bg="#1c1c1c", cursor="hand2")
+    login_label.grid(row=5, columnspan=2)
+    login_label.bind("<Button-1>", show_login)
+
+    error_label = tk.Label(app, text="", fg="red", bg="#1c1c1c")
+    error_label.grid(row=6, columnspan=2)
+
+    
+def update_chat(message):
+    global chat_text
+    chat_text.config(state=tk.NORMAL)
+    chat_text.insert(tk.END, message)
+    chat_text.config(state=tk.DISABLED)
+    chat_text.see(tk.END)
+    
+    
+def register():
+    username = username_entry.get()
+    password = password_entry.get()
+    email = email_entry.get()
+
+    if not username or not password or not email:
+        messagebox.showerror("Error", "All fields are required.")
+        return
+
+    try:
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((server_ip, 9999))
+
+        client_socket.send(f"REGISTER {username} {password} {email}".encode('utf-8'))
+
+        response = client_socket.recv(1024).decode('utf-8')
+        if response == "Registration successful":
+            messagebox.showinfo("Success", "Registration successful! Please login.")
+            client_socket.close()
+            show_login()
+        else:
+            messagebox.showerror("Error", "Registration failed. Please try again.")
+            client_socket.close()
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Connection failed: {str(e)}")
+
+# Start the application with the login screen
+show_login()
 app.mainloop()
