@@ -175,13 +175,11 @@ def show_chatroom(room):
 
     app.configure(bg='#1c1c1c')
 
-    # Utiliser grid pour un layout responsive
     app.grid_rowconfigure(0, weight=1)
     app.grid_rowconfigure(1, weight=0)
     app.grid_rowconfigure(2, weight=0)
     app.grid_columnconfigure(0, weight=1)
 
-    # Frame pour les messages
     chat_frame = tk.Frame(app, bg='#1c1c1c')
     chat_frame.grid(row=0, column=0, sticky="nsew")
 
@@ -197,12 +195,36 @@ def show_chatroom(room):
 
     send_button = tk.Button(input_frame, text="Send", command=lambda: send_message(chat_text, input_text), bg="#ffffff", fg="#000000")
     send_button.pack(side=tk.RIGHT, padx=5, pady=5)
+    
+    send_file_button = tk.Button(input_frame, text="Send File", command=send_file, bg="#ffffff", fg="#000000")
+    send_file_button.pack(side=tk.RIGHT, padx=5, pady=5)
 
     logout_button = tk.Button(app, text="Logout", command=logout, bg="#ffffff", fg="#000000")
     logout_button.grid(row=2, column=0, pady=10)
 
-    # Démarrer le thread pour recevoir les messages
     threading.Thread(target=receive_messages, daemon=True).start()
+
+
+from tkinter import filedialog
+
+def send_file():
+    file_path = filedialog.askopenfilename()
+    if file_path and client_socket:
+        try:
+            with open(file_path, "rb") as file:
+                file_data = file.read()
+                file_name = os.path.basename(file_path)
+                message = f"FILE {file_name}".encode('utf-8') + b"\x00" + file_data
+                message_length = len(message)
+                header = message_length.to_bytes(4, byteorder='big')
+                client_socket.send(header + message)
+                chat_text.config(state=tk.NORMAL)
+                chat_text.insert(tk.END, f"You sent a file: {file_name}\n")
+                chat_text.config(state=tk.DISABLED)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+
 
 # Fonction de déconnexion
 def logout():
@@ -338,6 +360,40 @@ def join_room(room):
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
+
+def ask_for_file_permission(sender_info, file_name, file_data):
+    def on_accept():
+        with open(file_name, "wb") as file:
+            file.write(file_data)
+        chat_text.config(state=tk.NORMAL)
+        chat_text.insert(tk.END, f"You accepted the file: {file_name} from {sender_info}\n")
+        chat_text.config(state=tk.DISABLED)
+        permission_window.destroy()
+
+    def on_decline():
+        chat_text.config(state=tk.NORMAL)
+        chat_text.insert(tk.END, f"You declined the file: {file_name} from {sender_info}\n")
+        chat_text.config(state=tk.DISABLED)
+        permission_window.destroy()
+
+    permission_window = tk.Toplevel(app)
+    permission_window.title("File Reception Permission")
+    permission_window.geometry("400x200")
+    permission_window.configure(bg='#1c1c1c')
+
+    message_label = tk.Label(permission_window, text=f"{sender_info} wants to send you a file: {file_name}\nDo you accept?", bg='#1c1c1c', fg='#ffffff', wraplength=300)
+    message_label.pack(pady=20)
+
+    button_frame = tk.Frame(permission_window, bg='#1c1c1c')
+    button_frame.pack(pady=20)
+
+    accept_button = tk.Button(button_frame, text="Accept", command=on_accept, bg="#76c7c0", fg="#000000")
+    accept_button.pack(side=tk.LEFT, padx=10)
+
+    decline_button = tk.Button(button_frame, text="Decline", command=on_decline, bg="#ff6347", fg="#000000")
+    decline_button.pack(side=tk.RIGHT, padx=10)
+
+
 # Fonction pour recevoir des messages du serveur
 def receive_messages():
     while True:
@@ -354,24 +410,27 @@ def receive_messages():
             message_length = int.from_bytes(header, byteorder='big')
             print(f"Taille du message attendu : {message_length} octets")  # Débogage
 
-            encrypted_message = b""
-            while len(encrypted_message) < message_length:
-                part = client_socket.recv(message_length - len(encrypted_message))
-                if not part:
-                    break
-                encrypted_message += part
-
-            if not encrypted_message:
+            message = client_socket.recv(message_length)
+            if not message:
                 break
 
-            print(f"Message chiffré reçu : {encrypted_message.hex()} (taille : {len(encrypted_message)} octets)")  # Débogage
-            message = decrypt_message(encrypted_message).decode('utf-8')
-            chat_text.config(state=tk.NORMAL)
-            chat_text.insert(tk.END, f"{sender_info}: {message}\n")
-            chat_text.config(state=tk.DISABLED)
+            if message.startswith(b"FILE "):
+                file_name_end = message.find(b"\x00", 5)
+                file_name = message[5:file_name_end].decode('utf-8')
+                file_data = message[file_name_end+1:]
+                ask_for_file_permission(sender_info, file_name, file_data)
+            else:
+                encrypted_message = message
+                print(f"Message chiffré reçu : {encrypted_message.hex()} (taille : {len(encrypted_message)} octets)")  # Débogage
+                decrypted_message = decrypt_message(encrypted_message).decode('utf-8')
+                chat_text.config(state=tk.NORMAL)
+                chat_text.insert(tk.END, f"{sender_info}: {decrypted_message}\n")
+                chat_text.config(state=tk.DISABLED)
         except Exception as e:
             print(f"Erreur : {str(e)}")
             break
+
+
 
 def decrypt_message(encrypted_message):
     global session_key
